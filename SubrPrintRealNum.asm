@@ -16,7 +16,7 @@
 global	_start
 
 section	.bss
-RealStr resb 25
+RealStr resb 9
 RealStrLen equ $-RealStr
 real resd 1
 exponent resb 1
@@ -77,13 +77,6 @@ NumToStr:
 .ShortArithmetic:
         cmp     eax, 0  ; do we have at least one char in our text?
         je      .PrintZ ; if no then just return "0"
-        ;mov     ebx, 1  ; preparing
-        ;shl     ebx, 31 ; the mask and
-        ;test    eax, ebx; apply it. Do we have a negative number?
-        ;jz      .lp      ; if not - process it as a positive number
-        ;not     eax     ; if negative - convert it 
-        ;inc     eax     ; into a positive one
-        ;add     esi, 1  ; and set negative flag
 .lp3:   xor     edx, edx; clear the 1st half of dividend
         cmp     eax, 0  ; does quotient equal "0" at last?
         je      .record ; if so, record number of chars
@@ -93,12 +86,6 @@ NumToStr:
                         ; record current dividend into the stack
         inc     ecx     ; increase digit counter
         jmp     .lp3
-;.NegChck:
-	;cmp     esi, 1  ; do we have a negative number?
-        ;jne     .record
-        ;mov     [edi], byte '-'
-                        ; put '-' in the begining of the string
-        ;inc     edi     ; next symbol
 .record:pop     eax     ; save another digit to intermidiate storage
         add     al, 48  ; convert it into ascii format 
         mov     [edi], al
@@ -265,7 +252,6 @@ RealToStr:
 			; discard the highest fractional bit
 	jmp	.lp4
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-
 .lp5:	inc     dword [FracBitCounter]
 	cmp	dword [FracBitCounter], 14
         jae     .PowerDigitsLongArithmetic
@@ -305,8 +291,44 @@ RealToStr:
         mov     [FirstFracBitFlag], dword 0
         		; if yes - calculate the number of digits of power
                         ; of 5's accumulator	
-	xor     edx, edx
+	mov     edx, [HighestPowerDigits]
         mov     eax, [LowerPowerDigits]
+	cmp	edx, 0
+	je	.NumOfUnsign0ShortArithmetic
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+        div     dword [billion]
+        mov     [HighestDigitsRtoS], eax
+        mov     eax, edx
+        mov     ebx, 9
+.again5:xor     edx, edx
+        cmp     eax, 0
+        je      .CountUnsign0s
+        div     dword [ten]
+        dec     ebx
+        inc     dword [NumberOfPower5Digits]
+        jmp     .again5
+.CountUnsign0s:
+        cmp     ebx, 0
+        je      .HighestDigitsRegister
+        dec     ebx
+        inc     dword [NumberOfPower5Digits]
+        jmp     .CountUnsign0s
+.HighestDigitsRegister:
+        mov     eax, [HighestDigitsRtoS]
+.again6:xor     edx, edx; clear the 1st half of dividend
+        cmp     eax, 0  ; does quotient equal "0" at last?
+        je      .NumOfUnsign0ComputationDP
+		 	; if so, compute the number of unsignificant 0's
+        div     dword [ten]
+                        ; divide eax by 10
+        inc     dword [NumberOfPower5Digits]     
+			; increase digit counter
+        jmp     .again6
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+.NumOfUnsign0ShortArithmetic:
+	nop
 .again2:div     dword [ten]
         xor     edx, edx
         inc     dword [NumberOfPower5Digits]
@@ -369,9 +391,6 @@ RealToStr:
                         ; if no convert accumulator into the string
         jmp     .lp5
 .ZeroBitDP:		; if current fractional bit is 0 then
-        ;mov     eax, [LowerFracDigits]
-        ;mul     dword [ten]
-        ;mov     [LowerFracDigits], eax
 	cmp     [HighestFracDigits], dword 0
                         ; multiplying the accumulator by 10
                         ; adding the power of 5 to the accumulator
@@ -468,13 +487,7 @@ RealToStr:
 	pop	ebp
 	ret
 
-;%define FirstFracBitFlag ebp-24
-;%define FracBitCounter ebp-28
-;%define FracUnsign0sCounter ebp-32
-;%define NumberOfPower5Digits ebp-36
 
-		
-	
 _start:	;fld	dword [b]	
 			; ST1
 	fld	dword [a]	
