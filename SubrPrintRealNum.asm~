@@ -24,7 +24,7 @@ IntPart resd 1
 FracPartBufStr resb 19
 
 section	.data
-a dd 4.999999
+a dd 0.0001220703125
 ;b dd 2.0
 five dd 5
 ten dd 10

@@ -24,7 +24,7 @@ IntPart resd 1
 FracPartBufStr resb 19
 
 section	.data
-a dd 0.0001220703125
+a dd 100.0001220703125
 ;b dd 2.0
 five dd 5
 ten dd 10
@@ -167,7 +167,9 @@ RealToStr:
 .next3:	xor	edx, edx; clear the first half of the dividend
 	mov	eax, dword [IntPart]
 	cmp	eax, 0
-	je	.next4
+	jne	.lp3
+	inc	ecx
+	jmp	.next4
 .lp3:	div	dword [ten]
 	inc	ecx
 	xor	edx, edx
@@ -186,10 +188,11 @@ RealToStr:
 			; length then record into the memory area zero byte
 	jmp	.error	; and quit the subroutine
 .next5: dec	ecx	; minus zero byte space
+	push	dword 0
 	push	dword [IntPart]
 	push	dword [str]
 	call	NumToStr
-	add	esp, 8
+	add	esp, 12
 	cmp	[mantissa], dword 0
 			; if we have only integer number	
 	je	.integer; then print zero byte behind the integer part
