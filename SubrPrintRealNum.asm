@@ -11,6 +11,7 @@
 %define FracBitCounter ebp-28
 %define FracUnsign0sCounter ebp-32
 %define NumberOfPower5Digits ebp-36
+%define HighestDigitsRtoS ebp-40
 
 global	_start
 
@@ -24,7 +25,7 @@ IntPart resd 1
 FracPartBufStr resb 19
 
 section	.data
-a dd 100.0001220703125
+a dd 4.000003814697265625
 ;b dd 2.0
 five dd 5
 ten dd 10
@@ -114,7 +115,7 @@ NumToStr:
 RealToStr:
 	push	ebp
 	mov	ebp, esp
-	sub	esp, 36	; I don't know the final value yet
+	sub	esp, 40	; I don't know the final value yet
 	pushad
 	xor	ecx, ecx
 	fst	dword [real]
@@ -267,11 +268,31 @@ RealToStr:
 
 .lp5:	inc     dword [FracBitCounter]
 	cmp	dword [FracBitCounter], 14
-        je      .ExtendedPrecision
+        jae     .PowerDigitsLongArithmetic
 	mov     eax, [LowerPowerDigits]
         mul     dword [five]
                         ; calculate the next power of 5
         mov     [LowerPowerDigits], eax
+	jmp	.DoublePrecision
+.PowerDigitsLongArithmetic:
+	cmp	dword [FracBitCounter], 19
+	je	.FracToStr
+	mov	edx, [HighestPowerDigits]
+	mov	eax, [LowerPowerDigits]
+	mov	ebx, 2
+.PDLAagain:
+	shl	edx, 1
+	shl	eax, 1
+	jnc	.PDLAnext
+	inc	edx
+.PDLAnext:
+	dec	ebx
+	cmp	ebx, 0
+	je	.PDLAnext2
+	jmp	.PDLAagain
+.PDLAnext2:
+	add     [LowerPowerDigits], eax
+	adc	[HighestPowerDigits], edx	
 .DoublePrecision:	; here we calculate the value till the 13-th 
 			; mantissa bit 
 	test    [mantissa], dword 0x80000000
@@ -282,8 +303,9 @@ RealToStr:
 	jne	.next7
 ;;;;;;;;unsignificant zeros part;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
         mov     [FirstFracBitFlag], dword 0
-        xor     edx, edx; if yes - calculate the number of digits of power
-                        ; of 5's accumulator
+        		; if yes - calculate the number of digits of power
+                        ; of 5's accumulator	
+	xor     edx, edx
         mov     eax, [LowerPowerDigits]
 .again2:div     dword [ten]
         xor     edx, edx
@@ -332,7 +354,7 @@ RealToStr:
 	mov	[HighestFracDigits], edx
 			; new accumulator value is stored in the memory 
 .SignificantBitDPend:
-	xor	edx, edx
+	mov	edx, [HighestPowerDigits]
         mov     eax, [LowerPowerDigits]
 			; current power of 5 is in EDX:EAX registers
         add     [LowerFracDigits], eax
@@ -442,7 +464,7 @@ RealToStr:
 .quit:	mov	[ECX], ecx
 	popad
 	mov	eax, [ECX]
-	add	esp, 36
+	add	esp, 40
 	pop	ebp
 	ret
 
