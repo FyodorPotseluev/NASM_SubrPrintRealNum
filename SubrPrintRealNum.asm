@@ -453,6 +453,7 @@ RealToStr:
 	mov	eax, '0'
 .againn:stosb	
 	inc	ecx
+	dec	dword [StrLen]
 	dec	dword [FracUnsign0sCounter]
 	cmp     [FracUnsign0sCounter], dword 0
 	je	.nextt
