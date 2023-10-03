@@ -16,7 +16,7 @@
 global	_start
 
 section	.bss
-RealStr resb 9
+RealStr resb 26
 RealStrLen equ $-RealStr
 real resd 1
 exponent resb 1
@@ -25,7 +25,7 @@ IntPart resd 1
 FracPartBufStr resb 19
 
 section	.data
-a dd 4.000003814697265625
+;a dd 0.000003814697265625
 ;b dd 2.0
 five dd 5
 ten dd 10
@@ -491,9 +491,10 @@ RealToStr:
 
 _start:	;fld	dword [b]	
 			; ST1
-	fld	dword [a]	
+	;fld	dword [a]	
 			; ST0
 	;fdiv	st1	; division
+	fldpi
 	mov	eax, RealStr
 	mov	ecx, RealStrLen
 	push	eax

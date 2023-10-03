@@ -11,11 +11,12 @@
 %define FracBitCounter ebp-28
 %define FracUnsign0sCounter ebp-32
 %define NumberOfPower5Digits ebp-36
+%define HighestDigitsRtoS ebp-40
 
 global	_start
 
 section	.bss
-RealStr resb 25
+RealStr resb 26
 RealStrLen equ $-RealStr
 real resd 1
 exponent resb 1
@@ -24,7 +25,7 @@ IntPart resd 1
 FracPartBufStr resb 19
 
 section	.data
-a dd 0.0001220703125
+a dd 0.000003814697265625
 ;b dd 2.0
 five dd 5
 ten dd 10
@@ -76,13 +77,6 @@ NumToStr:
 .ShortArithmetic:
         cmp     eax, 0  ; do we have at least one char in our text?
         je      .PrintZ ; if no then just return "0"
-        ;mov     ebx, 1  ; preparing
-        ;shl     ebx, 31 ; the mask and
-        ;test    eax, ebx; apply it. Do we have a negative number?
-        ;jz      .lp      ; if not - process it as a positive number
-        ;not     eax     ; if negative - convert it 
-        ;inc     eax     ; into a positive one
-        ;add     esi, 1  ; and set negative flag
 .lp3:   xor     edx, edx; clear the 1st half of dividend
         cmp     eax, 0  ; does quotient equal "0" at last?
         je      .record ; if so, record number of chars
@@ -92,12 +86,6 @@ NumToStr:
                         ; record current dividend into the stack
         inc     ecx     ; increase digit counter
         jmp     .lp3
-;.NegChck:
-	;cmp     esi, 1  ; do we have a negative number?
-        ;jne     .record
-        ;mov     [edi], byte '-'
-                        ; put '-' in the begining of the string
-        ;inc     edi     ; next symbol
 .record:pop     eax     ; save another digit to intermidiate storage
         add     al, 48  ; convert it into ascii format 
         mov     [edi], al
@@ -114,7 +102,7 @@ NumToStr:
 RealToStr:
 	push	ebp
 	mov	ebp, esp
-	sub	esp, 36	; I don't know the final value yet
+	sub	esp, 40	; I don't know the final value yet
 	pushad
 	xor	ecx, ecx
 	fst	dword [real]
@@ -167,7 +155,9 @@ RealToStr:
 .next3:	xor	edx, edx; clear the first half of the dividend
 	mov	eax, dword [IntPart]
 	cmp	eax, 0
-	je	.next4
+	jne	.lp3
+	inc	ecx
+	jmp	.next4
 .lp3:	div	dword [ten]
 	inc	ecx
 	xor	edx, edx
@@ -186,10 +176,11 @@ RealToStr:
 			; length then record into the memory area zero byte
 	jmp	.error	; and quit the subroutine
 .next5: dec	ecx	; minus zero byte space
+	push	dword 0
 	push	dword [IntPart]
 	push	dword [str]
 	call	NumToStr
-	add	esp, 8
+	add	esp, 12
 	cmp	[mantissa], dword 0
 			; if we have only integer number	
 	je	.integer; then print zero byte behind the integer part
@@ -261,14 +252,33 @@ RealToStr:
 			; discard the highest fractional bit
 	jmp	.lp4
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-
 .lp5:	inc     dword [FracBitCounter]
 	cmp	dword [FracBitCounter], 14
-        je      .ExtendedPrecision
+        jae     .PowerDigitsLongArithmetic
 	mov     eax, [LowerPowerDigits]
         mul     dword [five]
                         ; calculate the next power of 5
         mov     [LowerPowerDigits], eax
+	jmp	.DoublePrecision
+.PowerDigitsLongArithmetic:
+	cmp	dword [FracBitCounter], 19
+	je	.FracToStr
+	mov	edx, [HighestPowerDigits]
+	mov	eax, [LowerPowerDigits]
+	mov	ebx, 2
+.PDLAagain:
+	shl	edx, 1
+	shl	eax, 1
+	jnc	.PDLAnext
+	inc	edx
+.PDLAnext:
+	dec	ebx
+	cmp	ebx, 0
+	je	.PDLAnext2
+	jmp	.PDLAagain
+.PDLAnext2:
+	add     [LowerPowerDigits], eax
+	adc	[HighestPowerDigits], edx	
 .DoublePrecision:	; here we calculate the value till the 13-th 
 			; mantissa bit 
 	test    [mantissa], dword 0x80000000
@@ -279,9 +289,46 @@ RealToStr:
 	jne	.next7
 ;;;;;;;;unsignificant zeros part;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
         mov     [FirstFracBitFlag], dword 0
-        xor     edx, edx; if yes - calculate the number of digits of power
-                        ; of 5's accumulator
+        		; if yes - calculate the number of digits of power
+                        ; of 5's accumulator	
+	mov     edx, [HighestPowerDigits]
         mov     eax, [LowerPowerDigits]
+	cmp	edx, 0
+	je	.NumOfUnsign0ShortArithmetic
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+        div     dword [billion]
+        mov     [HighestDigitsRtoS], eax
+        mov     eax, edx
+        mov     ebx, 9
+.again5:xor     edx, edx
+        cmp     eax, 0
+        je      .CountUnsign0s
+        div     dword [ten]
+        dec     ebx
+        inc     dword [NumberOfPower5Digits]
+        jmp     .again5
+.CountUnsign0s:
+        cmp     ebx, 0
+        je      .HighestDigitsRegister
+        dec     ebx
+        inc     dword [NumberOfPower5Digits]
+        jmp     .CountUnsign0s
+.HighestDigitsRegister:
+        mov     eax, [HighestDigitsRtoS]
+.again6:xor     edx, edx; clear the 1st half of dividend
+        cmp     eax, 0  ; does quotient equal "0" at last?
+        je      .NumOfUnsign0ComputationDP
+		 	; if so, compute the number of unsignificant 0's
+        div     dword [ten]
+                        ; divide eax by 10
+        inc     dword [NumberOfPower5Digits]     
+			; increase digit counter
+        jmp     .again6
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+.NumOfUnsign0ShortArithmetic:
+	nop
 .again2:div     dword [ten]
         xor     edx, edx
         inc     dword [NumberOfPower5Digits]
@@ -329,7 +376,7 @@ RealToStr:
 	mov	[HighestFracDigits], edx
 			; new accumulator value is stored in the memory 
 .SignificantBitDPend:
-	xor	edx, edx
+	mov	edx, [HighestPowerDigits]
         mov     eax, [LowerPowerDigits]
 			; current power of 5 is in EDX:EAX registers
         add     [LowerFracDigits], eax
@@ -344,9 +391,6 @@ RealToStr:
                         ; if no convert accumulator into the string
         jmp     .lp5
 .ZeroBitDP:		; if current fractional bit is 0 then
-        ;mov     eax, [LowerFracDigits]
-        ;mul     dword [ten]
-        ;mov     [LowerFracDigits], eax
 	cmp     [HighestFracDigits], dword 0
                         ; multiplying the accumulator by 10
                         ; adding the power of 5 to the accumulator
@@ -409,6 +453,7 @@ RealToStr:
 	mov	eax, '0'
 .againn:stosb	
 	inc	ecx
+	dec	dword [StrLen]
 	dec	dword [FracUnsign0sCounter]
 	cmp     [FracUnsign0sCounter], dword 0
 	je	.nextt
@@ -439,22 +484,17 @@ RealToStr:
 .quit:	mov	[ECX], ecx
 	popad
 	mov	eax, [ECX]
-	add	esp, 36
+	add	esp, 40
 	pop	ebp
 	ret
 
-;%define FirstFracBitFlag ebp-24
-;%define FracBitCounter ebp-28
-;%define FracUnsign0sCounter ebp-32
-;%define NumberOfPower5Digits ebp-36
 
-		
-	
 _start:	;fld	dword [b]	
 			; ST1
 	fld	dword [a]	
 			; ST0
 	;fdiv	st1	; division
+	;fldpi
 	mov	eax, RealStr
 	mov	ecx, RealStrLen
 	push	eax
